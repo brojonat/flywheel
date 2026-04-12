@@ -1,16 +1,19 @@
 # flywheel
 
-**A cookiecutter template for standing up YAML-configured text-labeling
-services**, backed by Datasette + SQLite and paired with marimo notebooks
-for export and quality analysis. One generated project = one labeling
-exercise. A single `flywheel.yaml` is the source of truth for the whole
-thing: it drives the form, the validation, the storage schema, the
-reconciliation page, and the notebooks.
+**A YAML-configured system for the label → train → evaluate → relabel
+loop** that turns text-classification tasks into fine-tuned local models.
 
-The goal is to replace heavier in-house labeling setups with something a
-single developer can stand up, understand end-to-end, and regenerate in
-minutes when the schema changes. Edit one YAML, regenerate the project,
-start labeling.
+Today flywheel covers the first leg of that loop: a cookiecutter template
+for standing up text-labeling services backed by Datasette + SQLite, paired
+with marimo notebooks for export and quality analysis. One generated
+project = one labeling exercise. A single `flywheel.yaml` is the source of
+truth for the whole thing: it drives the form, the validation, the storage
+schema, the reconciliation page, and the notebooks.
+
+The goal is to eventually synthesize the full fine-tuning loop — labeling,
+training, zero-shot vs. fine-tuned evaluation, and active relabeling — into
+an end-to-end service that a single developer can deploy. See
+[Roadmap](#roadmap) for what's coming next.
 
 ---
 
@@ -33,10 +36,10 @@ Flywheel is that loop — stripped down, configured by YAML, and
 regeneratable via cookiecutter so you can spin up a new labeling exercise
 for a new domain without writing a new app.
 
-**Out of scope on purpose.** Fine-tuning the actual model, training-run
-dashboards, MLflow integration, and active-learning/model-in-the-loop
-suggestions are handled by downstream projects. Flywheel produces the
-labeled dataset; the model lives elsewhere.
+**Not yet implemented.** Fine-tuning the model, zero-shot vs. fine-tuned
+evaluation, and active-learning/model-in-the-loop relabeling are planned
+but not yet built. Today flywheel produces the labeled dataset; the
+training loop is next. See [Roadmap](#roadmap).
 
 ---
 
@@ -815,12 +818,36 @@ feature, don't re-litigate these without a strong reason.
   `separators=(",", ":")` and `sort_keys=True` — fewer tokens, less
   formatting variance for the model to learn, deterministic output
   across runs.
-- **Finetune is out of scope for this project.** Flywheel produces the
-  labeled JSONL; training a model on it is a separate downstream
-  project's responsibility.
+- **Finetune is not yet integrated.** Flywheel currently produces the
+  labeled JSONL; the training loop and evaluation pipeline will be
+  integrated as the project matures (see [Roadmap](#roadmap)).
 - **Auth deferred.** When needed, bolt on an existing `datasette-auth-*`
   plugin rather than roll our own. Today every labeler name is just a
   URL query parameter, which is fine for a small team behind a VPN.
+
+---
+
+## Roadmap
+
+Labeling is one leg of the flywheel. The full loop looks like:
+
+1. **Label** — surface records, collect human labels, reconcile
+   disagreements, export gold data. *(implemented today)*
+2. **Train** — fine-tune a small local model (e.g. Gemma 4) on the
+   exported gold JSONL. Single multi-target instruct model that emits
+   all label fields as one JSON object per inference.
+3. **Evaluate** — run the fine-tuned model and a zero-shot baseline
+   across the full dataset, score against ground truth, surface where
+   the model is weakest.
+4. **Relabel** — feed the model's low-confidence or high-error records
+   back into the labeling queue, prioritizing the examples that will
+   most improve the next training run.
+5. **Deploy** — package the loop as a service: YAML in, labeled dataset +
+   trained model out, with the relabeling cycle running continuously.
+
+The end state is a single `flywheel.yaml` that configures not just the
+labeling UI but the full train/eval/relabel cycle, deployable as a
+self-contained service.
 
 ---
 

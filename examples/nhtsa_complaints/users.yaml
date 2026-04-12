@@ -1,0 +1,7 @@
+users:
+  - { username: alice, password: wonderland,  role: labeler }
+  - { username: bob,   password: bobsecret,   role: labeler }
+  - { username: carol, password: carolsecret, role: labeler }
+  - { username: dave,  password: davesecret,  role: labeler }
+  - { username: eve,   password: evesecret,   role: labeler }
+  - { username: sam,   password: supervisor,  role: supervisor }

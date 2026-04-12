@@ -1,0 +1,20 @@
+# Labelers and supervisors for this example project.
+#
+# The generator (scripts/generate.sh) reads this file, hashes each
+# password via datasette_auth_passwords.utils.hash_password, emits the
+# hashes into _tmp_output/<slug>/metadata.yml so Datasette can
+# authenticate the user via the datasette-auth-passwords plugin, and
+# seeds the `users` table in the generated SQLite with the username +
+# role so FK references from submissions and reconciliations resolve
+# cleanly.
+#
+# Plaintext passwords live in this file on purpose — it is a
+# per-example seed, not a production secret store. For real
+# deployments, don't commit plaintext here; override metadata.yml out
+# of band or use a different auth plugin.
+
+users:
+  - { username: alice, password: wonderland,  role: labeler }
+  - { username: bob,   password: bobsecret,   role: labeler }
+  - { username: carol, password: carolsecret, role: labeler }
+  - { username: sam,   password: supervisor,  role: supervisor }

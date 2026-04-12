@@ -1,0 +1,12 @@
+_tmp_output/
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+.python-version
+uv.lock
+data/FLAT_CMPL.txt
+.agents/
+.claude/
+.pi/
+skills-lock.json

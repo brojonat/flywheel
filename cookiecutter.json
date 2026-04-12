@@ -1,0 +1,6 @@
+{
+  "project_slug": "vehicle_safety",
+  "project_name": "Vehicle Safety Labeling",
+  "labelers_per_record": "2",
+  "_copy_without_render": ["notebooks/*", "plugin/*"]
+}

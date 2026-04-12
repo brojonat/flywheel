@@ -1,0 +1,105 @@
+project:
+  name: NHTSA Vehicle Safety Complaints
+  slug: nhtsa_complaints
+  description: |
+    Label real NHTSA consumer safety complaints sampled from the FLAT_CMPL
+    file. Each record is a customer narrative plus manufacturer-reported
+    metadata (component description, crash/fire/injury flags, make/model/
+    year). Labelers assign failure location, type, affected vehicle system,
+    hazard tags, and severity.
+
+source:
+  sqlite_path: data/labeling.db
+  table: records
+  id_field: id
+  text_field: narrative
+  display_fields:
+    - { name: vehicle_make,          label: Make }
+    - { name: vehicle_model,         label: Model }
+    - { name: vehicle_year,          label: Year }
+    - { name: component_description, label: Component (NHTSA) }
+    - { name: crash,                 label: "Crash?" }
+    - { name: fire,                   label: "Fire?" }
+    - { name: injured,               label: Injured }
+    - { name: deaths,                label: Deaths }
+    - { name: miles,                 label: Mileage }
+    - { name: state,                 label: State }
+    - { name: fail_date,             label: Failure date }
+
+labeling:
+  strategy: queue
+  queue_sort: id
+
+fields:
+  - name: failure_location
+    kind: single_select
+    label: Location of failure
+    required: true
+    choices: [front, rear, left, right, underbody, cabin, engine_bay, overall, other]
+
+  - name: failure_type
+    kind: single_select
+    label: Type of failure
+    required: true
+    choices:
+      [mechanical, electrical, software, structural, fluid_leak, fire,
+       corrosion, wear, manufacturing_defect, other]
+
+  - name: vehicle_system
+    kind: single_select
+    label: Affected vehicle system
+    required: true
+    choices:
+      [brakes, steering, powertrain, suspension, hvac, adas, infotainment,
+       battery, fuel_system, cooling, transmission, tires, restraints,
+       body, electrical_system, exhaust, other]
+
+  - name: hazard_tags
+    kind: multi_select
+    label: Hazard tags
+    required: true
+    min_selections: 1
+    max_selections: 3
+    choices:
+      - fire
+      - collision
+      - injury
+      - stalling
+      - loss_of_control
+      - visibility
+      - noise
+      - vibration
+      - corrosion
+      - leakage
+      - rollaway
+      - unintended_acceleration
+      - sudden_deceleration
+      - loss_of_power
+
+  - name: severity
+    kind: ordinal
+    label: Severity
+    required: true
+    min: 1
+    max: 5
+    endpoints: { 1: Negligible, 5: Catastrophic }
+
+reconciliation:
+  min_labelers: 2
+  rule: strict_equality
+  unanimous_auto_gold: true
+
+export:
+  tabular:
+    formats: [parquet, csv, jsonl]
+  finetune:
+    shape: chat_messages
+    system_prompt: |
+      You are a vehicle safety analyst reviewing consumer complaints filed
+      with NHTSA. Read the complaint narrative and the attached metadata
+      and emit a JSON object with the following fields: failure_location
+      (string), failure_type (string), vehicle_system (string), hazard_tags
+      (array of 1-3 strings), and severity (integer 1-5 where 1=negligible
+      and 5=catastrophic). Respond with JSON only, no prose.
+    user_template: "{text}"
+    assistant_template: "{labels_json}"

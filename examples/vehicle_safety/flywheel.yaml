@@ -1,0 +1,137 @@
+project:
+  name: Vehicle Safety Labeling (Hello World)
+  slug: vehicle_safety
+  description: |
+    Hello-world flywheel example. Safety engineers label customer
+    complaints with failure location, type, affected vehicle system,
+    hazard tags, and severity. Hierarchical hazard/subhazard is the
+    next iteration.
+
+source:
+  sqlite_path: data/labeling.db
+  table: records
+  id_field: id
+  text_field: narrative
+  display_fields:
+    - { name: submitted_at, label: Submitted }
+    - { name: vehicle_make, label: Make }
+    - { name: vehicle_model, label: Model }
+    - { name: vehicle_year, label: Year }
+    - { name: region, label: Region }
+    - { name: reported_severity, label: Reporter severity }
+
+fields:
+  - name: failure_location
+    kind: single_select
+    label: Location of failure
+    required: true
+    choices: [front, rear, left, right, underbody, cabin, engine_bay, other]
+
+  - name: failure_type
+    kind: single_select
+    label: Type of failure
+    required: true
+    choices: [mechanical, electrical, software, structural, fluid_leak, fire, other]
+
+  - name: vehicle_system
+    kind: single_select
+    label: Affected vehicle system
+    required: true
+    choices: [brakes, steering, powertrain, suspension, hvac, adas, infotainment, battery, body, other]
+
+  - name: hazards
+    kind: hierarchical_multi_select
+    label: Hazard → subhazard
+    required: true
+    min_entries: 1
+    max_entries: 3
+    levels:
+      - { name: hazard,    label: Hazard }
+      - { name: subhazard, label: Subhazard }
+    choices:
+      - name: fire
+        label: Fire
+        children:
+          - { name: underhood,      label: Under-hood fire }
+          - { name: battery,        label: Battery / HV pack fire }
+          - { name: fuel,           label: Fuel-system fire }
+          - { name: exhaust,        label: Exhaust ignition }
+      - name: collision
+        label: Collision risk
+        children:
+          - { name: loss_of_control, label: Loss of control }
+          - { name: brake_failure,   label: Brake failure }
+          - { name: steering_loss,   label: Steering loss }
+          - { name: unintended_accel,label: Unintended acceleration }
+      - name: injury
+        label: Injury
+        children:
+          - { name: driver,         label: Driver injured }
+          - { name: passenger,      label: Passenger injured }
+          - { name: pedestrian,     label: Pedestrian injured }
+      - name: stalling
+        label: Stalling
+        children:
+          - { name: highway,        label: Highway-speed stall }
+          - { name: parked,         label: At-rest stall }
+          - { name: restart_fail,   label: Will not restart }
+      - name: visibility
+        label: Visibility
+        children:
+          - { name: windshield,     label: Windshield obstruction }
+          - { name: lighting,       label: Lighting failure }
+          - { name: mirror,         label: Mirror / camera failure }
+      - name: leakage
+        label: Leakage
+        children:
+          - { name: fuel,           label: Fuel leak }
+          - { name: coolant,        label: Coolant leak }
+          - { name: oil,            label: Oil leak }
+          - { name: brake_fluid,    label: Brake-fluid leak }
+      - name: rollaway
+        label: Rollaway
+        children:
+          - { name: park_fail,      label: Park pawl failure }
+          - { name: ebrake_fail,    label: E-brake failure }
+
+  - name: severity
+    kind: ordinal
+    label: Severity
+    required: true
+    min: 1
+    max: 5
+    endpoints: { 1: Negligible, 5: Catastrophic }
+
+  - name: notes
+    kind: free_text
+    label: Analyst notes
+    required: false
+    rows: 3
+    max_length: 1000
+    placeholder: Optional — anything the next reviewer should know.
+    hint: Short prose. Supervisor picks one labeler's note during reconciliation.
+
+labeling:
+  # How to pick the next record for a labeler.
+  #   queue:  ORDER BY queue_sort ascending — deterministic, easy to track progress.
+  #   random: ORDER BY RANDOM() — spreads work across users when there is contention.
+  strategy: queue
+  queue_sort: id
+
+reconciliation:
+  min_labelers: 2
+  rule: strict_equality
+  unanimous_auto_gold: true
+
+export:
+  tabular:
+    formats: [parquet, csv, jsonl]
+  finetune:
+    shape: chat_messages
+    system_prompt: |
+      You are a vehicle safety analyst. Read the customer complaint and
+      emit a JSON object with the following fields: failure_location,
+      failure_type, vehicle_system, hazard_tags (array), and severity
+      (integer 1-5). Respond with JSON only.
+    user_template: "{text}"
+    assistant_template: "{labels_json}"

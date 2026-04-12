@@ -1,0 +1,25 @@
+[project]
+name = "flywheel-template"
+version = "0.0.0"
+description = "Cookiecutter template for YAML-configured labeling services"
+requires-python = ">=3.11"
+dependencies = [
+  "datasette>=0.65",
+  "sqlite-utils>=3.36",
+  "cookiecutter>=2.5",
+  "pyyaml>=6.0",
+  "marimo>=0.23.1",
+  "pandas>=3.0.2",
+  "pyarrow>=23.0.1",
+  "pydantic>=2.12.5",
+  "datasette-auth-passwords>=1.1.1",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.3",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"

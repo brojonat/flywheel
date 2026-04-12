@@ -1,0 +1,23 @@
+project:
+  name: {{ cookiecutter.project_name }}
+  slug: {{ cookiecutter.project_slug }}
+  description: |
+    Placeholder config — overwritten by scripts/generate.sh with the
+    selected example. If you see this in a generated project, the copy
+    step did not run.
+
+source:
+  sqlite_path: data/labeling.db
+  table: records
+  id_field: id
+  text_field: narrative
+  display_fields: []
+
+fields: []
+
+reconciliation:
+  # labelers_per_record was set at scaffold time via cookiecutter; the
+  # example YAML's reconciliation.min_labelers must match this value.
+  min_labelers: {{ cookiecutter.labelers_per_record }}
+  rule: strict_equality
+  unanimous_auto_gold: true

@@ -215,10 +215,11 @@ _tmp_output/<slug>/
 - `flywheel.yaml` is the single source of truth. It comes from
   `examples/<slug>/flywheel.yaml` — `scripts/generate.sh` cookiecuts the
   skeleton, then copies the example's YAML over it.
-- `data/labeling.db` is created by `sqlite-utils insert` from
-  `examples/<slug>/data.csv` (or `fake_data/sample.csv` for the default
-  hello-world). The plugin then creates `users`, `submissions`, and
-  `reconciliations` tables on startup if they don't exist.
+- `data/labeling.db` is created by `scripts/ingest_data.py` from the
+  example's data file — CSV, Parquet, or SQLite (`.db`/`.sqlite`). Falls
+  back to `fake_data/sample.csv` for the default hello-world. The plugin
+  then creates `users`, `submissions`, and `reconciliations` tables on
+  startup if they don't exist.
 - `plugin/flywheel_plugin.py` is a single Python file with every route.
   Ugly enough to read top-to-bottom in one sitting, deliberately not
   split into modules.
@@ -241,6 +242,8 @@ source:
   table:       records                 # the table holding the unlabeled rows
   id_field:    id                      # integer primary key in `table`
   text_field:  narrative               # column to render as the thing to label
+  context_field: followup_notes        # optional: a second text column shown below the narrative
+  context_label: Follow-up notes       # heading for the context block (default: "Additional context")
   display_fields:                      # metadata columns surfaced above the form
     - { name: submitted_at, label: Submitted }
     - { name: vehicle_make, label: Make }
@@ -495,7 +498,8 @@ Or interactively: `marimo edit notebooks/analysis.py`.
 
 | Script                          | Purpose                                                                                     |
 | ------------------------------- | ------------------------------------------------------------------------------------------- |
-| `scripts/generate.sh <slug>`    | Runs `cookiecutter` against `examples/<slug>/flywheel.yaml`, copies the YAML over the rendered placeholder, and loads `examples/<slug>/data.csv` (or `fake_data/sample.csv`) into `data/labeling.db` via `sqlite-utils insert --csv --detect-types --pk=id`. |
+| `scripts/generate.sh <slug>`    | Runs `cookiecutter` against `examples/<slug>/flywheel.yaml`, copies the YAML over the rendered placeholder, and loads the example's data file into `data/labeling.db` via `scripts/ingest_data.py`. Supports CSV, Parquet, SQLite (`.db`/`.sqlite`); falls back to `fake_data/sample.csv` when no per-example file exists. |
+| `scripts/ingest_data.py <file> <db>` | Loads a data file into a `records` table in a SQLite database. Detects format from extension: `.csv` (via `sqlite-utils insert`), `.parquet` (via pyarrow), `.db`/`.sqlite` (table copy via sqlite3). |
 | `scripts/serve.sh <project_dir> [port]` | Starts Datasette on the generated project with `--plugins-dir plugin` and the right `FLYWHEEL_CONFIG` env var. Defaults to port 8001. |
 | `scripts/sample_nhtsa.py`       | Reservoir-samples N records from `data/FLAT_CMPL.txt` (the NHTSA consumer complaints flat file, 1.5 GB, 2.2M rows, tab-delimited, 49 fields). Streams the file, filters out records with narratives shorter than 60 chars, and writes a compact CSV with a curated column subset. See [`data/CMPL_SCHEMA.txt`](data/CMPL_SCHEMA.txt). |
 | `scripts/simulate_labelers.py`  | Posts synthetic labels to a running datasette instance. 5 users × 20 records each, pair-assigned across all 10 user-pairs (so each user labels 20 records and every record gets exactly 2 labels). Uses heuristic keyword matching over the narrative + metadata to pick "canonical" labels, then perturbs each field with configurable probability (`--perturb`, default 0.15) so you get a realistic mix of gold and contested records. |
@@ -694,19 +698,85 @@ band before exposing an instance to untrusted users.
 `scripts/serve.sh` passes `--metadata metadata.yml` to `datasette
 serve` whenever a metadata file is present.
 
-**Inside the plugin**, the old URL-query-parameter approach
-(`?labeler=alice`, `?supervisor=sam`) is gone. Every route reads the
-authenticated username from `request.actor["id"]` via a small
-`_require_actor` helper. Forms no longer carry hidden `labeler` /
-`supervisor` fields — the cookie is the source of truth. A "log out"
-link on the home page and the labeling form points at Datasette's
-built-in `/-/logout`.
+**Inside the plugin**, every route reads the authenticated username
+from `request.actor["id"]` via a small `_require_actor` helper. Forms
+carry no hidden `labeler` / `supervisor` fields — the cookie is the
+source of truth. A "log out" link on the home page and the labeling
+form points at Datasette's built-in `/-/logout`.
 
-**Role-based authorization is intentionally minimal.** The
-`users.role` column and the `actor.role` field exist, but the plugin
-doesn't currently *enforce* role-based access (any authenticated user
-can hit the reconciliation queue). For a trusted internal team that's
-fine; tighten it when you need to.
+**Role enforcement.** The plugin enforces role-based access on
+reconciliation routes. Labelers are blocked from all
+`/flywheel/reconcile*` routes with a 403 page. Supervisors can access
+both labeling *and* reconciliation routes (common in small teams where
+the supervisor also labels). The home page and users index are open to
+all authenticated users.
+
+| Route pattern              | `labeler` | `supervisor` |
+| -------------------------- | --------- | ------------ |
+| `/flywheel`                | yes       | yes          |
+| `/flywheel/label`          | yes       | yes          |
+| `/flywheel/users`          | yes       | yes          |
+| `/flywheel/reconcile*`     | **403**   | yes          |
+
+### Default credentials
+
+`make gen` prints credentials at the end of generation. For reference:
+
+**`vehicle_safety`:**
+
+| username | password      | role       |
+| -------- | ------------- | ---------- |
+| alice    | wonderland    | labeler    |
+| bob      | bobsecret     | labeler    |
+| carol    | carolsecret   | labeler    |
+| sam      | supervisor    | supervisor |
+
+**`nhtsa_complaints`:** same users plus `dave` / `davesecret` and
+`eve` / `evesecret` (both labelers).
+
+### Programmatic login (agents & scripts)
+
+The login flow is a standard form POST that sets a signed cookie.
+Here's how to authenticate from the command line or a script:
+
+```bash
+# curl: log in, save the cookie, use it for subsequent requests
+curl -c cookies.txt -d 'username=alice&password=wonderland' \
+     http://localhost:8001/-/login
+
+curl -b cookies.txt http://localhost:8001/flywheel/label
+```
+
+```python
+# httpx (Python): same flow
+import httpx
+
+client = httpx.Client(base_url="http://localhost:8001", follow_redirects=True)
+client.post("/-/login", data={"username": "alice", "password": "wonderland"})
+# the ds_actor cookie is now set on the client
+resp = client.get("/flywheel/label")
+```
+
+### Adding or changing users
+
+1. Edit `examples/<slug>/users.yaml` — add/remove/change users.
+2. Re-run `make gen` (or `make EXAMPLE=<slug> gen`). This re-hashes
+   passwords, rewrites `metadata.yml`, and re-seeds the `users` table.
+
+To add a user to an already-running instance without regenerating:
+
+```bash
+# 1. hash the password
+datasette hash-password
+
+# 2. add the hash + actor to metadata.yml under
+#    plugins.datasette-auth-passwords
+# 3. insert the user into the users table
+sqlite-utils insert data/labeling.db users \
+  '{"username":"newuser","role":"labeler","created_at":"2026-01-01T00:00:00"}' --pk=username
+
+# 4. restart datasette (it reads metadata.yml at startup)
+```
 
 ## Compliance test suite
 
@@ -821,9 +891,11 @@ feature, don't re-litigate these without a strong reason.
 - **Finetune is not yet integrated.** Flywheel currently produces the
   labeled JSONL; the training loop and evaluation pipeline will be
   integrated as the project matures (see [Roadmap](#roadmap)).
-- **Auth deferred.** When needed, bolt on an existing `datasette-auth-*`
-  plugin rather than roll our own. Today every labeler name is just a
-  URL query parameter, which is fine for a small team behind a VPN.
+- **Auth via `datasette-auth-passwords`.** PBKDF2-hashed passwords in
+  `metadata.yml`, signed `ds_actor` cookie. Roles are enforced:
+  labelers get 403 on reconcile routes, supervisors can do everything.
+  Swap the auth plugin for a different `datasette-auth-*` plugin when
+  you need SSO/OAuth/LDAP.
 
 ---
 
@@ -853,10 +925,6 @@ self-contained service.
 
 ## Known gaps / future work
 
-- **Role-based authorization** — today every authenticated user can
-  reach every `/flywheel/*` route. Enforcing labelers-can't-reconcile
-  and supervisors-can't-label would be a small `_require_role` helper
-  per route.
 - **Real secret handling** — plaintext passwords in `users.yaml` are
   fine for per-example seeding but not for production. Swap in a
   password-hash-only manifest or a different Datasette auth plugin
@@ -865,5 +933,5 @@ self-contained service.
   with a plugin dir, a metadata file, and a SQLite database; any
   Datasette hosting story works, but we haven't written one down.
 - **More examples** — easy to add. Drop `examples/<slug>/flywheel.yaml`,
-  `examples/<slug>/data.csv`, and `examples/<slug>/users.yaml` and
-  `make EXAMPLE=<slug> gen`.
+  a data file (`data.csv`, `data.parquet`, `data.db`, or `data.sqlite`),
+  and `examples/<slug>/users.yaml`, then `make EXAMPLE=<slug> gen`.

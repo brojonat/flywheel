@@ -12,6 +12,8 @@ source:
   table: records
   id_field: id
   text_field: narrative
+  context_field: followup_notes
+  context_label: Follow-up notes
   display_fields:
     - { name: submitted_at, label: Submitted }
     - { name: vehicle_make, label: Make }

@@ -224,3 +224,16 @@ def test_anonymous_request_redirects_to_login(anon_client: httpx.Client) -> None
     resp = anon_client.get("/flywheel/label", follow_redirects=False)
     assert resp.status_code == 302
     assert "/-/login" in resp.headers["location"]
+
+
+def test_labeler_blocked_from_reconcile(
+    client: httpx.Client,
+    clean_state: sqlite3.Connection,
+) -> None:
+    """A labeler (alice) should get 403 on all reconcile routes."""
+    resp = client.get("/flywheel/reconcile")
+    assert resp.status_code == 403
+    assert "supervisor" in resp.text.lower()
+
+    resp = client.get("/flywheel/reconcile/1?view=pending")
+    assert resp.status_code == 403

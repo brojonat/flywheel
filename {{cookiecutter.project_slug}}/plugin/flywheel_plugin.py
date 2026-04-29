@@ -43,9 +43,10 @@ const FLYWHEEL_CHOICES  = {};   // field → { parentName: [{name,label}, ...] }
 const FLYWHEEL_LEVELS   = {};   // field → [parentLevelName, childLevelName]
 const FLYWHEEL_PARENTS  = {};   // field → [{name,label}, ...]
 
-function flywheelRegisterHier(field, levels, parents, children) {
+function flywheelRegisterHier(field, levels, levelLabels, parents, children) {
   FLYWHEEL_LEVELS[field] = levels;
   FLYWHEEL_PARENTS[field] = parents;
+  FLYWHEEL_PARENTS[field]._levelLabels = levelLabels;
   FLYWHEEL_CHOICES[field] = children;
 }
 
@@ -87,8 +88,11 @@ function flywheelAddEntry(field) {
   }
   const entry = document.createElement('div');
   entry.className = 'hier-entry';
+  const pLabel = (FLYWHEEL_PARENTS[field]._levelLabels || [levels[0], levels[1]]);
   entry.innerHTML =
-    '<select name="' + field + '__' + levels[0] + '" onchange="flywheelUpdateChildren(this)">' + parentOpts + '</select>'
+    '<div class="hier-level-label">' + pLabel[0] + '</div>'
+    + '<select name="' + field + '__' + levels[0] + '" onchange="flywheelUpdateChildren(this)">' + parentOpts + '</select>'
+    + '<div class="hier-level-label">' + pLabel[1] + '</div>'
     + '<select name="' + field + '__' + levels[1] + '"><option value=""></option></select>'
     + '<button type="button" class="hier-remove" onclick="flywheelRemoveEntry(this)" title="Remove this entry">&times;</button>';
   group.appendChild(entry);
@@ -108,21 +112,55 @@ function flywheelRemoveEntry(btn) {
 
 CSS = """
 <style>
-  body { font-family: system-ui, sans-serif; max-width: 960px; margin: 2em auto; padding: 0 1em; color: #222; }
+  /* -- base -- */
+  body { font-family: system-ui, sans-serif; max-width: 960px; margin: 2em auto; padding: 0 1em; color: #1a1a1a; line-height: 1.5; }
   h1 { margin-bottom: 0.2em; }
   .muted { color: #666; font-size: 0.9em; }
-  blockquote { background: #f6f6f6; border-left: 3px solid #888; padding: 0.8em 1em; white-space: pre-wrap; }
-  fieldset { margin: 1em 0; padding: 0.6em 1em; border: 1px solid #ddd; border-radius: 4px; }
-  legend { font-weight: 600; }
+  blockquote { background: #f8f9fa; border-left: 3px solid #888; padding: 0.8em 1em; white-space: pre-wrap; border-radius: 0 6px 6px 0; }
+  .context-block { margin: 0.5em 0 1em; }
+  .context-block summary { cursor: pointer; font-weight: 600; }
+  blockquote.context { border-left-color: #b0c4de; background: #f0f4f8; }
+  .errors { background: #ffe8e8; border: 1px solid #d44; padding: 0.6em 1em; border-radius: 6px; }
   dl.meta { display: grid; grid-template-columns: max-content 1fr; gap: 0.2em 1em; font-size: 0.9em; }
   dl.meta dt { color: #666; }
-  .chips label { display: inline-block; padding: 0.4em 0.8em; margin: 0.1em; border: 1px solid #ccc; border-radius: 999px; cursor: pointer; }
+
+  /* -- form inputs -- */
+  fieldset { margin: 1em 0; padding: 0.8em 1em; border: 1px solid #ddd; border-radius: 8px; }
+  legend { font-weight: 600; padding: 0 0.3em; }
+  select, textarea {
+    font-family: inherit; font-size: 1em; color: #1a1a1a;
+    padding: 0.5em 0.7em; border: 1px solid #ccc; border-radius: 6px; background: #fff;
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  select:focus, textarea:focus { outline: none; border-color: #2a6df4; box-shadow: 0 0 0 3px rgba(42,109,244,0.12); }
+  textarea { width: 100%; box-sizing: border-box; }
+  input[type="checkbox"] { accent-color: #2a6df4; width: 1.1em; height: 1.1em; vertical-align: middle; cursor: pointer; }
+  .check-group label { display: flex; align-items: center; gap: 0.4em; padding: 0.35em 0; cursor: pointer; }
+  .check-group label:hover { color: #2a6df4; }
+
+  /* -- ordinal chips -- */
+  .chips { display: flex; gap: 0.35em; flex-wrap: wrap; }
+  .chips label {
+    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 2.4em; padding: 0.45em 0.85em;
+    border: 1.5px solid #ccc; border-radius: 999px;
+    cursor: pointer; background: #fff; color: #444;
+    transition: all 0.15s;
+  }
+  .chips label:hover { border-color: #2a6df4; color: #2a6df4; background: #f0f4ff; }
   .chips input { display: none; }
   .chips input:checked + span { font-weight: 700; }
-  button { background: #2a6df4; color: white; border: 0; padding: 0.6em 1.2em; border-radius: 4px; font-size: 1em; cursor: pointer; }
-  .errors { background: #ffe8e8; border: 1px solid #d44; padding: 0.6em 1em; border-radius: 4px; }
+  .chips label:has(input:checked) { border-color: #2a6df4; background: #eef3ff; color: #2a6df4; }
 
-  /* reconciliation table */
+  /* -- buttons -- */
+  button {
+    background: #2a6df4; color: white; border: 0;
+    padding: 0.6em 1.2em; border-radius: 6px; font-size: 1em; cursor: pointer;
+    transition: background 0.15s;
+  }
+  button:hover { background: #1b5ad4; }
+
+  /* -- reconciliation table -- */
   table.reconcile { border-collapse: collapse; width: 100%; margin: 1em 0; }
   table.reconcile th, table.reconcile td { text-align: left; padding: 0.6em 0.8em; border-bottom: 1px solid #e0e0e0; vertical-align: top; }
   table.reconcile th { background: #fafafa; font-weight: 600; }
@@ -135,32 +173,49 @@ CSS = """
   table.reconcile td.pick label:hover { background: rgba(0,0,0,0.05); }
   table.reconcile td.pick input[type="radio"] { margin-right: 0.4em; }
   table.reconcile td.pick .free-text { white-space: pre-wrap; font-weight: normal; font-style: normal; max-width: 26em; }
-  .progress { background: #eef; border: 1px solid #ccd; padding: 0.4em 0.8em; border-radius: 4px; display: inline-block; font-size: 0.9em; }
+  .progress { background: #eef; border: 1px solid #ccd; padding: 0.4em 0.8em; border-radius: 6px; display: inline-block; font-size: 0.9em; }
   .reconcile-nav { display: flex; gap: 1em; align-items: center; justify-content: space-between; margin-top: 1em; }
   nav.tabs { margin: 0.3em 0 1em; }
-  nav.tabs a { padding: 0.4em 0.9em; border: 1px solid #ccd; border-radius: 4px; text-decoration: none; color: #455; margin-right: 0.3em; }
+  nav.tabs a { padding: 0.4em 0.9em; border: 1px solid #ccd; border-radius: 6px; text-decoration: none; color: #455; margin-right: 0.3em; transition: all 0.15s; }
+  nav.tabs a:hover { border-color: #2a6df4; color: #2a6df4; }
   nav.tabs a.tab-active { background: #2a6df4; color: white; border-color: #2a6df4; font-weight: 600; }
-  .banner { background: #e9f7ef; border: 1px solid #b7e1c3; padding: 0.7em 1em; border-radius: 4px; margin: 0.6em 0; }
+  .banner { background: #e9f7ef; border: 1px solid #b7e1c3; padding: 0.7em 1em; border-radius: 6px; margin: 0.6em 0; }
   .banner.warn { background: #fff4d8; border-color: #e7c66a; }
   form.undo-form { display: inline; }
-  button.undo-btn { background: #eee; color: #a00; border: 1px solid #d88; padding: 0.4em 0.9em; border-radius: 4px; font-size: 0.9em; cursor: pointer; }
+  button.undo-btn { background: #eee; color: #a00; border: 1px solid #d88; padding: 0.4em 0.9em; border-radius: 6px; font-size: 0.9em; cursor: pointer; }
   button.undo-btn:hover { background: #fdd; }
 
-  /* hierarchical picker */
-  .hier-group .hier-entry { display: flex; gap: 0.4em; align-items: center; margin: 0.3em 0; }
-  .hier-group .hier-entry select { padding: 0.3em 0.5em; font-size: 1em; }
-  .hier-group .hier-remove { background: #eee; color: #666; border: 1px solid #ccc; padding: 0.2em 0.6em; font-size: 1em; line-height: 1; cursor: pointer; }
-  .hier-group .hier-remove:hover { background: #fdd; color: #a00; border-color: #d88; }
-  .hier-add { background: transparent; color: #2a6df4; border: 1px dashed #8aa; padding: 0.3em 0.8em; margin-top: 0.3em; font-size: 0.9em; cursor: pointer; }
+  /* -- hierarchical picker (vertical stacking) -- */
+  .hier-group .hier-entry {
+    display: flex; flex-direction: column; gap: 0.5em;
+    padding: 0.7em 0.9em; margin: 0.5em 0;
+    border: 1px solid #e0e0e0; border-radius: 8px; background: #fafafa;
+    position: relative;
+  }
+  .hier-group .hier-entry select { width: 100%; }
+  .hier-group .hier-entry .hier-level-label { font-size: 0.8em; color: #666; margin-bottom: -0.3em; }
+  .hier-group .hier-remove {
+    position: absolute; top: 0.5em; right: 0.5em;
+    background: none; color: #999; border: none;
+    padding: 0.2em 0.5em; font-size: 1.1em; line-height: 1; cursor: pointer;
+    transition: color 0.15s;
+  }
+  .hier-group .hier-remove:hover { color: #d44; background: none; }
+  .hier-add {
+    background: transparent; color: #2a6df4; border: 1px dashed #b0c4de;
+    padding: 0.4em 0.9em; margin-top: 0.4em; font-size: 0.9em; cursor: pointer;
+    border-radius: 6px; transition: all 0.15s;
+  }
+  .hier-add:hover { background: #f0f4ff; border-color: #2a6df4; }
 
-  /* custom reconciliation column */
+  /* -- custom reconciliation column -- */
   table.reconcile td.custom { background: #f2f6ff; min-width: 14em; }
   table.reconcile td.custom .custom-widget { margin-top: 0.3em; padding-left: 1.4em; font-weight: normal; font-style: normal; }
   table.reconcile td.custom select { font-size: 0.9em; padding: 0.2em 0.4em; max-width: 100%; }
   table.reconcile td.custom .custom-multi { font-size: 0.85em; }
   table.reconcile td.custom .custom-check { display: inline-block; margin-right: 0.6em; }
   table.reconcile td.custom .custom-chips { display: flex; gap: 0.2em; flex-wrap: wrap; }
-  table.reconcile td.custom .custom-chip { padding: 0.15em 0.5em; border: 1px solid #ccd; border-radius: 999px; cursor: pointer; font-size: 0.85em; }
+  table.reconcile td.custom .custom-chip { padding: 0.15em 0.5em; border: 1px solid #ccd; border-radius: 999px; cursor: pointer; font-size: 0.85em; transition: all 0.15s; }
   table.reconcile td.custom .custom-chip input { display: none; }
   table.reconcile td.custom .custom-chip input:checked + span { font-weight: 700; color: #2a6df4; }
 </style>
@@ -187,13 +242,13 @@ def _render_field(field: dict) -> str:
         min_sel = field.get("min_selections", 0)
         max_sel = field.get("max_selections", len(field["choices"]))
         boxes = "".join(
-            f'<label style="display:block"><input type="checkbox" name="{_esc(name)}" value="{_esc(c)}"> {_esc(c)}</label>'
+            f'<label><input type="checkbox" name="{_esc(name)}" value="{_esc(c)}"> {_esc(c)}</label>'
             for c in field["choices"]
         )
         return (
             f'<fieldset><legend>{_esc(label)} '
             f'<span class="muted">(pick {min_sel}–{max_sel})</span></legend>'
-            f'{boxes}</fieldset>'
+            f'<div class="check-group">{boxes}</div></fieldset>'
         )
 
     if kind == "ordinal":
@@ -223,8 +278,7 @@ def _render_field(field: dict) -> str:
         return (
             f'<fieldset><legend>{_esc(label)}</legend>'
             f'<textarea name="{_esc(name)}" rows="{rows}" maxlength="{max_length}" '
-            f'placeholder="{_esc(placeholder)}" {required_attr} '
-            f'style="width:100%;font-family:inherit;font-size:1em;padding:0.5em"></textarea>'
+            f'placeholder="{_esc(placeholder)}" {required_attr}></textarea>'
             f'{hint_html}</fieldset>'
         )
 
@@ -237,6 +291,8 @@ def _render_field(field: dict) -> str:
             )
         parent_level = levels[0]["name"]
         child_level = levels[1]["name"]
+        parent_label = levels[0].get("label", parent_level)
+        child_label = levels[1].get("label", child_level)
         min_entries = int(field.get("min_entries", 0))
         max_entries = int(field.get("max_entries", 99))
         starting = max(min_entries, 1)
@@ -258,8 +314,10 @@ def _render_field(field: dict) -> str:
         def _entry_html() -> str:
             return (
                 '<div class="hier-entry">'
+                f'<div class="hier-level-label">{_esc(parent_label)}</div>'
                 f'<select name="{_esc(name)}__{_esc(parent_level)}" '
                 f'onchange="flywheelUpdateChildren(this)">{parent_options}</select>'
+                f'<div class="hier-level-label">{_esc(child_label)}</div>'
                 f'<select name="{_esc(name)}__{_esc(child_level)}">'
                 '<option value=""></option></select>'
                 '<button type="button" class="hier-remove" '
@@ -271,6 +329,7 @@ def _render_field(field: dict) -> str:
         js_payload = json.dumps({
             "field": name,
             "levels": [parent_level, child_level],
+            "levelLabels": [parent_label, child_label],
             "parents": parents_data,
             "children": children_map,
         })
@@ -283,7 +342,7 @@ def _render_field(field: dict) -> str:
             f'<button type="button" class="hier-add" '
             f'onclick="flywheelAddEntry(\'{_esc(name)}\')">+ Add entry</button>'
             f'<script>(function(){{var d={js_payload};'
-            f'flywheelRegisterHier(d.field,d.levels,d.parents,d.children);}})();</script>'
+            f'flywheelRegisterHier(d.field,d.levels,d.levelLabels,d.parents,d.children);}})();</script>'
             f'</fieldset>'
         )
 
@@ -338,8 +397,7 @@ def _render_custom_widget(field: dict, prefill=None) -> str:
         body = _esc(prefill) if prefill else ""
         return (
             f'<textarea name="{_esc(custom_name)}" rows="{rows}" '
-            f'maxlength="{max_length}" '
-            f'style="width:100%;font-family:inherit;font-size:0.9em;padding:0.4em">'
+            f'maxlength="{max_length}" style="font-size:0.9em">'
             f'{body}</textarea>'
         )
 
@@ -349,6 +407,8 @@ def _render_custom_widget(field: dict, prefill=None) -> str:
             return '<span class="muted">(schema error)</span>'
         parent_level = levels[0]["name"]
         child_level = levels[1]["name"]
+        parent_label = levels[0].get("label", parent_level)
+        child_label = levels[1].get("label", child_level)
         min_entries = int(field.get("min_entries", 0))
         max_entries = int(field.get("max_entries", 99))
 
@@ -381,8 +441,10 @@ def _render_custom_widget(field: dict, prefill=None) -> str:
         def _entry_html(parent_val: str = "", child_val: str = "") -> str:
             return (
                 '<div class="hier-entry">'
+                f'<div class="hier-level-label">{_esc(parent_label)}</div>'
                 f'<select name="{_esc(custom_name)}__{_esc(parent_level)}" '
                 f'onchange="flywheelUpdateChildren(this)">{_parent_options(parent_val)}</select>'
+                f'<div class="hier-level-label">{_esc(child_label)}</div>'
                 f'<select name="{_esc(custom_name)}__{_esc(child_level)}">'
                 f'{_child_options(parent_val, child_val)}</select>'
                 '<button type="button" class="hier-remove" '
@@ -405,6 +467,7 @@ def _render_custom_widget(field: dict, prefill=None) -> str:
             {
                 "field": custom_name,
                 "levels": [parent_level, child_level],
+                "levelLabels": [parent_label, child_label],
                 "parents": parents_data,
                 "children": children_map,
             }
@@ -417,7 +480,7 @@ def _render_custom_widget(field: dict, prefill=None) -> str:
             f'<button type="button" class="hier-add" '
             f'onclick="flywheelAddEntry(\'{_esc(custom_name)}\')">+ Add entry</button>'
             f'<script>(function(){{var d={js_payload};'
-            f'flywheelRegisterHier(d.field,d.levels,d.parents,d.children);}})();</script>'
+            f'flywheelRegisterHier(d.field,d.levels,d.levelLabels,d.parents,d.children);}})();</script>'
         )
 
     return '<span class="muted">(unsupported)</span>'
@@ -496,6 +559,29 @@ def _require_actor(request):
         if actor and actor.get("id"):
             return actor["id"]
     return None
+
+
+def _actor_role(request):
+    """Return the role string from the authenticated actor, or None."""
+    actor = getattr(request, "actor", None) or {}
+    return actor.get("role")
+
+
+def _require_supervisor(request):
+    """Return a 403 Response if the authenticated user is not a supervisor,
+    or None if they are. Callers should check the return value and return
+    it immediately if non-None."""
+    role = _actor_role(request)
+    if role == "supervisor":
+        return None
+    body = """
+      <h1>Forbidden</h1>
+      <p>Reconciliation requires the <strong>supervisor</strong> role.
+      You are logged in as a <strong>labeler</strong>.</p>
+      <p><a href="/flywheel">&larr; Home</a></p>
+    """
+    html = f"<!doctype html><html><head>{CSS}{JS}</head><body>{body}</body></html>"
+    return Response.html(html, status=403)
 
 
 def _login_redirect(request) -> Response:
@@ -595,6 +681,7 @@ async def label_next(scope, receive, datasette, request):
     table = source["table"]
     id_field = source["id_field"]
     text_field = source["text_field"]
+    context_field = source.get("context_field")
     display_fields = source.get("display_fields") or []
 
     n_labelers = int(cfg.get("reconciliation", {}).get("min_labelers", 2))
@@ -603,7 +690,7 @@ async def label_next(scope, receive, datasette, request):
     queue_sort = labeling_cfg.get("queue_sort", id_field)
     order_clause = "RANDOM()" if strategy == "random" else f'r."{queue_sort}"'
 
-    cols = [id_field, text_field] + [f["name"] for f in display_fields]
+    cols = [id_field, text_field] + ([context_field] if context_field else []) + [f["name"] for f in display_fields]
     cols_sql = ", ".join(f'r."{c}"' for c in cols)
     sql = (
         f'SELECT {cols_sql} FROM "{table}" r '
@@ -625,8 +712,17 @@ async def label_next(scope, receive, datasette, request):
         return _page(body)
 
     row = rows[0]
-    rid = row[id_field]
+    rid = int(row[id_field])
     text = row[text_field]
+    context_html = ""
+    if context_field and row[context_field]:
+        context_label = source.get("context_label", "Additional context")
+        context_html = (
+            f'<details class="context-block" open>'
+            f'<summary class="muted">{_esc(context_label)}</summary>'
+            f'<blockquote class="context">{_esc(row[context_field])}</blockquote>'
+            f'</details>'
+        )
     meta_html = ""
     if display_fields:
         items = "".join(
@@ -643,6 +739,7 @@ async def label_next(scope, receive, datasette, request):
       · <a href="/-/logout">log out</a></p>
       {meta_html}
       <blockquote>{_esc(text)}</blockquote>
+      {context_html}
       <form method="post" action="/flywheel/label/submit">
         <input type="hidden" name="record_id" value="{_esc(rid)}">
         {fields_html}
@@ -789,7 +886,7 @@ async def _contested_queue(datasette, cfg):
     )
     by_record: dict = {}
     for row in result.rows:
-        by_record.setdefault(row["record_id"], []).append(
+        by_record.setdefault(int(row["record_id"]), []).append(
             {
                 "username": row["username"],
                 "submitted_at": row["submitted_at"],
@@ -822,7 +919,7 @@ async def _reviewed_queue(datasette):
     )
     reconciliation_by_record: dict = {}
     for row in rec_result.rows:
-        reconciliation_by_record[row["record_id"]] = {
+        reconciliation_by_record[int(row["record_id"])] = {
             "supervisor": row["supervisor"],
             "reconciled_at": row["reconciled_at"],
             "values": json.loads(row["values_json"]),
@@ -841,7 +938,7 @@ async def _reviewed_queue(datasette):
     )
     subs_by_record: dict = {}
     for row in sub_result.rows:
-        subs_by_record.setdefault(row["record_id"], []).append(
+        subs_by_record.setdefault(int(row["record_id"]), []).append(
             {
                 "username": row["username"],
                 "submitted_at": row["submitted_at"],
@@ -856,6 +953,9 @@ async def reconcile_index(scope, receive, datasette, request):
     supervisor = _require_actor(request)
     if supervisor is None:
         return _login_redirect(request)
+    forbidden = _require_supervisor(request)
+    if forbidden:
+        return forbidden
     cfg = load_config()
     view = request.args.get("view", "pending")
     if view not in ("pending", "reviewed"):
@@ -964,6 +1064,9 @@ async def reconcile_detail(scope, receive, datasette, request):
     supervisor = _require_actor(request)
     if supervisor is None:
         return _login_redirect(request)
+    forbidden = _require_supervisor(request)
+    if forbidden:
+        return forbidden
     cfg = load_config()
     view = request.args.get("view", "pending")
     if view not in ("pending", "reviewed"):
@@ -1006,10 +1109,12 @@ async def reconcile_detail(scope, receive, datasette, request):
 
     # pull the source record for context
     source = cfg["source"]
+    context_field = source.get("context_field")
     display_fields = source.get("display_fields") or []
     display_cols = [f["name"] for f in display_fields]
+    extra_cols = ([context_field] if context_field else [])
     cols_sql = ", ".join(
-        f'"{c}"' for c in [source["id_field"], source["text_field"]] + display_cols
+        f'"{c}"' for c in [source["id_field"], source["text_field"]] + extra_cols + display_cols
     )
     db = _get_db(datasette)
     src_res = await db.execute(
@@ -1035,6 +1140,17 @@ async def reconcile_detail(scope, receive, datasette, request):
             for f in display_fields
         )
         meta_html = f'<dl class="meta">{items}</dl>'
+
+    # render context field
+    context_html = ""
+    if context_field and src_row[context_field]:
+        context_label = source.get("context_label", "Additional context")
+        context_html = (
+            f'<details class="context-block" open>'
+            f'<summary class="muted">{_esc(context_label)}</summary>'
+            f'<blockquote class="context">{_esc(src_row[context_field])}</blockquote>'
+            f'</details>'
+        )
 
     # build reconciliation table
     header_cells = (
@@ -1169,6 +1285,7 @@ async def reconcile_detail(scope, receive, datasette, request):
       {banner_html}
       {meta_html}
       <blockquote>{_esc(src_row[source["text_field"]])}</blockquote>
+      {context_html}
       <form method="post" action="/flywheel/reconcile/{record_id}/submit">
         <input type="hidden" name="view" value="{_esc(view)}">
         <table class="reconcile">
@@ -1198,6 +1315,9 @@ async def reconcile_undo(scope, receive, datasette, request):
     supervisor = _require_actor(request)
     if supervisor is None:
         return _login_redirect(request)
+    forbidden = _require_supervisor(request)
+    if forbidden:
+        return forbidden
     cfg = load_config()
     record_id = int(request.url_vars["record_id"])
     body_bytes = await request.post_body()
@@ -1322,6 +1442,9 @@ async def reconcile_submit(scope, receive, datasette, request):
     supervisor = _require_actor(request)
     if supervisor is None:
         return _login_redirect(request)
+    forbidden = _require_supervisor(request)
+    if forbidden:
+        return forbidden
     cfg = load_config()
     record_id = int(request.url_vars["record_id"])
 

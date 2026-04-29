@@ -11,6 +11,8 @@ source:
   table: records
   id_field: id
   text_field: narrative
+  # context_field: column_name   # optional: a second text column shown below the narrative
+  # context_label: Label text    # heading for the context block (default: "Additional context")
   display_fields: []
 
 fields: []
